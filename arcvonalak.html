@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>FaceMesh Élő</title>
+  <style>
+    body { display: flex; flex-direction: column; align-items: center; background: #f0f0f0; font-family: sans-serif; }
+    #controlPanel { margin: 10px; display: flex; gap: 10px; align-items: center; }
+    canvas { border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>FaceMesh élő arcpont és háló</h1>
+
+  <!-- Vezérlő panel -->
+  <div id="controlPanel">
+    <label for="pointColor">Pontok színe:</label>
+    <input type="color" id="pointColor" value="#00FF00">
+
+    <label for="pointSize">Pontok mérete:</label>
+    <input type="number" id="pointSize" min="1" max="10" value="2">
+
+    <label for="lineColor">Vonalak színe:</label>
+    <input type="color" id="lineColor" value="#FF0000">
+  </div>
+
+  <!-- Videó és rajzterület -->
+  <video id="video" autoplay playsinline style="display:none;"></video>
+  <canvas id="outputCanvas"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('outputCanvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    const pointColorInput = document.getElementById('pointColor');
+    const pointSizeInput = document.getElementById('pointSize');
+    const lineColorInput = document.getElementById('lineColor');
+
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    faceMesh.onResults(onResults);
+
+    function onResults(results) {
+      // Beállítjuk a vászon méretét a videóhoz
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      // Videó kirajzolása
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      // Arcpontok és kapcsolatok kirajzolása
+      if (results.multiFaceLandmarks) {
+        for (const landmarks of results.multiFaceLandmarks) {
+          // Vonalak
+          drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {
+            color: lineColorInput.value,
+            lineWidth: 1
+          });
+          // Pontok
+          drawLandmarks(canvasCtx, landmarks, {
+            color: pointColorInput.value,
+            radius: Number(pointSizeInput.value)
+          });
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await faceMesh.send({image: videoElement});
+      },
+      width: 640,
+      height: 480
+    });
+    camera.start();
+  </script>
+</body>
+</html>
