@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<title>Webkamera ArcHáló</title>
+<style>
+  video, canvas {
+    border: 1px solid black;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+</head>
+<body>
+<h1>Webkamera ArcHáló</h1>
+<video id="video" width="400" height="300" autoplay muted playsinline></video>
+<canvas id="meshCanvas" width="400" height="300"></canvas>
+<br>
+<button id="toggleCam">Kamera ki/be</button>
+<button id="toggleFull">Teljes képernyő</button>
+<button id="toggleMesh">Arcpontok ki/be</button>
+
+<script>
+const videoElement = document.getElementById('video');
+const meshCanvas = document.getElementById('meshCanvas');
+const ctxMesh = meshCanvas.getContext('2d');
+
+let cameraOn = false;
+let meshOn = false;
+let camera;
+
+// FaceMesh inicializálása
+const faceMesh = new FaceMesh({
+  locateFile: (file) => {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+  }
+});
+faceMesh.setOptions({
+  maxNumFaces: 1,
+  refineLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+faceMesh.onResults(onResults);
+
+function onResults(results) {
+  ctxMesh.clearRect(0, 0, meshCanvas.width, meshCanvas.height);
+  if (meshOn && results.multiFaceLandmarks) {
+    for (const landmarks of results.multiFaceLandmarks) {
+      // pontok kirajzolása
+      drawConnectors(ctxMesh, landmarks, FACEMESH_TESSELATION,
+        {color: '#999999', lineWidth: 1});
+      drawConnectors(ctxMesh, landmarks, FACEMESH_RIGHT_EYE, {color: '#FF3030', lineWidth: 1});
+      drawConnectors(ctxMesh, landmarks, FACEMESH_LEFT_EYE, {color: '#FF3030', lineWidth: 1});
+      drawConnectors(ctxMesh, landmarks, FACEMESH_FACE_OVAL, {color: '#999999', lineWidth: 1});
+      drawConnectors(ctxMesh, landmarks, FACEMESH_LIPS, {color: '#FF3030', lineWidth: 1});
+      //drawLandmarks(ctxMesh, landmarks, {color: '#FF0000', radius: 1});
+    }
+  }
+}
+
+document.getElementById('toggleCam').addEventListener('click', async () => {
+  if (!cameraOn) {
+    camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await faceMesh.send({image: videoElement});
+      },
+      width: 400,
+      height: 300
+    });
+    await camera.start();
+    cameraOn = true;
+  } else {
+    camera.stop();
+    cameraOn = false;
+  }
+});
+
+document.getElementById('toggleFull').addEventListener('click', () => {
+  if (meshCanvas.requestFullscreen) {
+    meshCanvas.requestFullscreen();
+  }
+});
+
+document.getElementById('toggleMesh').addEventListener('click', () => {
+  meshOn = !meshOn;
+});
+async function initCamera() {
+    // HTTPS ellenőrzés
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        alert('A webkamera használatához a weboldalt HTTPS-en kell futtatni!');
+        return;
+    }
+
+    // getUserMedia kompatibilitás biztosítása
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices = navigator.mediaDevices || {};
+        navigator.mediaDevices.getUserMedia = function (constraints) {
+            const getUserMedia = navigator.getUserMedia ||
+                                 navigator.webkitGetUserMedia ||
+                                 navigator.mozGetUserMedia ||
+                                 navigator.msGetUserMedia;
+            if (!getUserMedia) {
+                return Promise.reject(new Error('getUserMedia nem támogatott ebben a böngészőben.'));
+            }
+            return new Promise((resolve, reject) => getUserMedia.call(navigator, constraints, resolve, reject));
+        };
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const video = document.getElementById('video');
+        video.srcObject = stream;
+        video.play();
+    } catch (err) {
+        console.error("Kamera hozzáférési hiba:", err);
+        alert('Nem sikerült elérni a webkamerát: ' + err.message);
+    }
+}
+
+window.onload = initCamera;
+</script>
+</body>
+</html>
